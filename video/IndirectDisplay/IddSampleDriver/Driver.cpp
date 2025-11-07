@@ -524,7 +524,7 @@ void IndirectDeviceContext::InitAdapter()
     // ==============================
     // TODO: Update the below diagnostic information in accordance with the target hardware. The strings and version
     // numbers are used for telemetry and may be displayed to the user in some situations.
-    //
+  //
     // This is also where static per-adapter capabilities are determined.
     // ==============================
 
@@ -532,7 +532,8 @@ void IndirectDeviceContext::InitAdapter()
     AdapterCaps.Size = sizeof(AdapterCaps);
 
     // Declare basic feature support for the adapter (required)
-    AdapterCaps.MaxMonitorsSupported = IDD_SAMPLE_MONITOR_COUNT;
+    // Set to maximum possible (10) to allow dynamic configuration
+    AdapterCaps.MaxMonitorsSupported = 10; // Increased from hardcoded IDD_SAMPLE_MONITOR_COUNT
     AdapterCaps.EndPointDiagnostics.Size = sizeof(AdapterCaps.EndPointDiagnostics);
     AdapterCaps.EndPointDiagnostics.GammaSupport = IDDCX_FEATURE_IMPLEMENTATION_NONE;
     AdapterCaps.EndPointDiagnostics.TransmissionType = IDDCX_TRANSMISSION_TYPE_WIRED_OTHER;
@@ -540,7 +541,7 @@ void IndirectDeviceContext::InitAdapter()
     // Declare your device strings for telemetry (required)
     AdapterCaps.EndPointDiagnostics.pEndPointFriendlyName = L"IddSample Device";
     AdapterCaps.EndPointDiagnostics.pEndPointManufacturerName = L"Microsoft";
-    AdapterCaps.EndPointDiagnostics.pEndPointModelName = L"IddSample Model";
+  AdapterCaps.EndPointDiagnostics.pEndPointModelName = L"IddSample Model";
 
     // Declare your hardware and firmware versions (required)
     IDDCX_ENDPOINT_VERSION Version = {};
@@ -568,13 +569,15 @@ void IndirectDeviceContext::InitAdapter()
         m_Adapter = AdapterInitOut.AdapterObject;
 
         // Store the device context object into the WDF object context
-        auto* pContext = WdfObjectGet_IndirectDeviceContextWrapper(AdapterInitOut.AdapterObject);
+     auto* pContext = WdfObjectGet_IndirectDeviceContextWrapper(AdapterInitOut.AdapterObject);
         pContext->pContext = this;
     }
 }
 
-void IndirectDeviceContext::FinishInit(UINT ConnectorIndex)
+void IndirectDeviceContext::FinishInit(UINT ConnectorIndex, const MonitorConfig& config)
 {
+    (void)config; // TODO: Use config to generate dynamic EDID or configure monitor properties
+    
     // ==============================
     // TODO: In a real driver, the EDID should be retrieved dynamically from a connected physical monitor. The EDIDs
     // provided here are purely for demonstration.
@@ -587,22 +590,25 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex)
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&Attr, IndirectMonitorContextWrapper);
 
     // In the sample driver, we report a monitor right away but a real driver would do this when a monitor connection event occurs
-    IDDCX_MONITOR_INFO MonitorInfo = {};
+ IDDCX_MONITOR_INFO MonitorInfo = {};
     MonitorInfo.Size = sizeof(MonitorInfo);
     MonitorInfo.MonitorType = DISPLAYCONFIG_OUTPUT_TECHNOLOGY_HDMI;
     MonitorInfo.ConnectorIndex = ConnectorIndex;
 
     MonitorInfo.MonitorDescription.Size = sizeof(MonitorInfo.MonitorDescription);
     MonitorInfo.MonitorDescription.Type = IDDCX_MONITOR_DESCRIPTION_TYPE_EDID;
-    if (ConnectorIndex >= ARRAYSIZE(s_SampleMonitors))
+    
+    // Use existing EDID blocks if available, otherwise use edid-less mode
+ if (ConnectorIndex < ARRAYSIZE(s_SampleMonitors))
     {
-        MonitorInfo.MonitorDescription.DataSize = 0;
-        MonitorInfo.MonitorDescription.pData = nullptr;
+    MonitorInfo.MonitorDescription.DataSize = IndirectSampleMonitor::szEdidBlock;
+        MonitorInfo.MonitorDescription.pData = const_cast<BYTE*>(s_SampleMonitors[ConnectorIndex].pEdidBlock);
     }
     else
     {
-        MonitorInfo.MonitorDescription.DataSize = IndirectSampleMonitor::szEdidBlock;
-        MonitorInfo.MonitorDescription.pData = const_cast<BYTE*>(s_SampleMonitors[ConnectorIndex].pEdidBlock);
+     // For dynamically configured monitors beyond the hardcoded array, use edid-less mode
+        MonitorInfo.MonitorDescription.DataSize = 0;
+        MonitorInfo.MonitorDescription.pData = nullptr;
     }
 
     // ==============================
@@ -610,13 +616,13 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex)
     // permanently attached to the display adapter device object. The container ID is typically made unique for each
     // monitor and can be used to associate the monitor with other devices, like audio or input devices. In this
     // sample we generate a random container ID GUID, but it's best practice to choose a stable container ID for a
-    // unique monitor or to use "this" device's container ID for a permanent/integrated monitor.
+  // unique monitor or to use "this" device's container ID for a permanent/integrated monitor.
     // ==============================
 
-    // Create a container ID
+ // Create a container ID
     CoCreateGuid(&MonitorInfo.MonitorContainerId);
 
-    IDARG_IN_MONITORCREATE MonitorCreate = {};
+  IDARG_IN_MONITORCREATE MonitorCreate = {};
     MonitorCreate.ObjectAttributes = &Attr;
     MonitorCreate.pMonitorInfo = &MonitorInfo;
 
@@ -625,11 +631,15 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex)
     NTSTATUS Status = IddCxMonitorCreate(m_Adapter, &MonitorCreate, &MonitorCreateOut);
     if (NT_SUCCESS(Status))
     {
-        // Create a new monitor context object and attach it to the Idd monitor object
+  // Create a new monitor context object and attach it to the Idd monitor object
         auto* pMonitorContextWrapper = WdfObjectGet_IndirectMonitorContextWrapper(MonitorCreateOut.MonitorObject);
         pMonitorContextWrapper->pContext = new IndirectMonitorContext(MonitorCreateOut.MonitorObject);
 
-        // Tell the OS that the monitor has been plugged in
+        // TODO: Store the configuration in the monitor context for later use
+   // The MonitorConfig can be stored in IndirectMonitorContext if needed for
+   // mode generation or other runtime configuration
+
+ // Tell the OS that the monitor has been plugged in
         IDARG_OUT_MONITORARRIVAL ArrivalOut;
         Status = IddCxMonitorArrival(MonitorCreateOut.MonitorObject, &ArrivalOut);
     }
@@ -665,13 +675,52 @@ void IndirectMonitorContext::AssignSwapChain(IDDCX_SWAPCHAIN SwapChain, LUID Ren
 
 void IndirectMonitorContext::UnassignSwapChain()
 {
-    // Stop processing the last swap-chain
+  // Stop processing the last swap-chain
     m_ProcessingThread.reset();
 }
 
 #pragma endregion
 
 #pragma region DDI Callbacks
+
+// Helper function to read config path from registry
+static std::wstring ReadConfigPathFromRegistry()
+{
+    HKEY hKey;
+    std::wstring configPath;
+    
+    LONG result = RegOpenKeyExW(
+  HKEY_LOCAL_MACHINE,
+        L"SOFTWARE\\IddSampleDriver",
+        0,
+    KEY_READ,
+        &hKey
+    );
+    
+    if (result == ERROR_SUCCESS)
+  {
+        wchar_t buffer[MAX_PATH];
+        DWORD bufferSize = sizeof(buffer);
+   
+        result = RegQueryValueExW(
+          hKey,
+    L"ConfigPath",
+            nullptr,
+         nullptr,
+   reinterpret_cast<BYTE*>(buffer),
+         &bufferSize
+        );
+        
+ if (result == ERROR_SUCCESS)
+    {
+  configPath = buffer;
+        }
+        
+   RegCloseKey(hKey);
+    }
+    
+    return configPath;
+}
 
 _Use_decl_annotations_
 NTSTATUS IddSampleAdapterInitFinished(IDDCX_ADAPTER AdapterObject, const IDARG_IN_ADAPTER_INIT_FINISHED* pInArgs)
@@ -682,9 +731,36 @@ NTSTATUS IddSampleAdapterInitFinished(IDDCX_ADAPTER AdapterObject, const IDARG_I
     auto* pDeviceContextWrapper = WdfObjectGet_IndirectDeviceContextWrapper(AdapterObject);
     if (NT_SUCCESS(pInArgs->AdapterInitStatus))
     {
-        for (DWORD i = 0; i < IDD_SAMPLE_MONITOR_COUNT; i++)
+        // Try to load configuration from registry
+        std::wstring configPath = ReadConfigPathFromRegistry();
+     std::vector<MonitorConfig> configs;
+        std::wstring errorMsg;
+        
+        bool configLoaded = false;
+        
+        if (!configPath.empty())
         {
-            pDeviceContextWrapper->pContext->FinishInit(i);
+ // Try to load from file
+         configLoaded = ConfigurationManager::LoadFromFile(configPath, configs, errorMsg);
+    
+         // If loading failed, log error but continue with default
+      if (!configLoaded)
+     {
+  // Could use WPP tracing here to log the error
+       // For now, just fall through to default config
+            }
+        }
+        
+        // If no config or loading failed, use default configuration
+  if (!configLoaded || configs.empty())
+        {
+            configs = ConfigurationManager::GetDefaultConfiguration();
+      }
+        
+        // Create monitors from configuration
+      for (size_t i = 0; i < configs.size(); i++)
+        {
+    pDeviceContextWrapper->pContext->FinishInit(static_cast<UINT>(i), configs[i]);
         }
     }
 

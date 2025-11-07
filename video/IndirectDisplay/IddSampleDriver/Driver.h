@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "Trace.h"
+#include "ConfigurationManager.h"
 
 namespace Microsoft
 {
@@ -97,7 +98,7 @@ namespace Microsoft
             virtual ~IndirectDeviceContext();
 
             void InitAdapter();
-            void FinishInit(UINT ConnectorIndex);
+            void FinishInit(UINT ConnectorIndex, const MonitorConfig& config);
 
         protected:
             WDFDEVICE m_WdfDevice;

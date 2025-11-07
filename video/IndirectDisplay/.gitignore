@@ -1,0 +1,55 @@
+# vcpkg - Installed packages directory
+vcpkg_installed/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.db
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+
+# Build outputs
+x64/
+ARM64/
+Debug/
+Release/
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.exp
+*.lib
+*.dll
+*.exe
+*.sys
+*.inf
+*.cat
+*.cer
+
+# MSBuild logs
+*.log
+*.tlog/
+
+# Code Analysis
+*.nativecodeanalysis.xml
+*.sarif
+
+# Test results
+TestResults/
+
+# Trace files
+*.etl
+*.tmh
+
+# Package files
+*.zip
+*.cab
+
+# Temporary files
+*.tmp
+*.bak
+~*

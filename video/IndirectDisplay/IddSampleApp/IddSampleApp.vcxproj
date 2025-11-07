@@ -22,6 +22,8 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <ProjectGuid>{ED59DFCA-E75B-4DD8-B5C2-6BFF77A225A6}</ProjectGuid>
     <RootNamespace>IddSampleApp</RootNamespace>
+    <VcpkgEnabled>true</VcpkgEnabled>
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|ARM64'" Label="Configuration">
@@ -131,7 +133,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\IddSampleDriver\ConfigurationManager.cpp" />
+    <ClCompile Include="..\IddSampleDriver\TemplateManager.cpp" />
     <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\IddSampleDriver\ConfigurationManager.h" />
+    <ClInclude Include="..\IddSampleDriver\TemplateManager.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
