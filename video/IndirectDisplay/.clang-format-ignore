@@ -1,0 +1,19 @@
+# Exclude third-party or generated files from clang-format
+
+# Generated trace files
+*.tmh
+
+# Build outputs
+x64/
+ARM64/
+Debug/
+Release/
+
+# vcpkg installed packages
+vcpkg_installed/
+
+# Visual Studio generated files
+*.aps
+
+# Exclude EDID data blocks (they're intentionally formatted as hex arrays)
+# If you want to exclude specific sections, you can use clang-format off/on comments in the code

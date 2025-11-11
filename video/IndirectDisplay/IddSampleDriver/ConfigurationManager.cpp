@@ -1,8 +1,10 @@
 #include "ConfigurationManager.h"
-#include <fstream>
-#include <sstream>
+
 #include <algorithm>
+#include <fstream>
 #include <set>
+#include <sstream>
+
 #include <nlohmann/json.hpp>
 
 using namespace Microsoft::IndirectDisp;
@@ -11,41 +13,44 @@ using json = nlohmann::json;
 // Helper to convert wstring to string
 namespace
 {
-    std::string WStringToString(const std::wstring& wstr)
-    {
-        if (wstr.empty()) return std::string();
-        int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
-        std::string result(size_needed, 0);
-        WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &result[0], size_needed, NULL, NULL);
-        return result;
-    }
-
-    std::wstring StringToWString(const std::string& str)
-    {
-        if (str.empty()) return std::wstring();
-        int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
-        std::wstring result(size_needed, 0);
-        MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &result[0], size_needed);
-        return result;
-    }
-
-    bool ReadFileContent(const std::wstring& filePath, std::string& outContent, std::wstring& outError)
-    {
-        std::ifstream file(filePath);
-        if (!file.is_open())
-        {
-            outError = L"Error: Unable to open file: " + filePath;
-            return false;
-        }
-
-        std::stringstream buffer;
-        buffer << file.rdbuf();
-        outContent = buffer.str();
-        return true;
-    }
+std::string WStringToString(const std::wstring& wstr)
+{
+    if (wstr.empty())
+        return std::string();
+    int size_needed = WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), NULL, 0, NULL, NULL);
+    std::string result(size_needed, 0);
+    WideCharToMultiByte(CP_UTF8, 0, &wstr[0], (int)wstr.size(), &result[0], size_needed, NULL, NULL);
+    return result;
 }
 
-bool ConfigurationManager::LoadFromFile(const std::wstring& filePath, std::vector<MonitorConfig>& outConfigs, std::wstring& outError)
+std::wstring StringToWString(const std::string& str)
+{
+    if (str.empty())
+        return std::wstring();
+    int size_needed = MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), NULL, 0);
+    std::wstring result(size_needed, 0);
+    MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &result[0], size_needed);
+    return result;
+}
+
+bool ReadFileContent(const std::wstring& filePath, std::string& outContent, std::wstring& outError)
+{
+    std::ifstream file(filePath);
+    if (!file.is_open())
+    {
+        outError = L"Error: Unable to open file: " + filePath;
+        return false;
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    outContent = buffer.str();
+    return true;
+}
+} // namespace
+
+bool ConfigurationManager::LoadFromFile(const std::wstring& filePath, std::vector<MonitorConfig>& outConfigs,
+                                        std::wstring& outError)
 {
     std::string jsonContent;
     if (!ReadFileContent(filePath, jsonContent, outError))
@@ -56,7 +61,8 @@ bool ConfigurationManager::LoadFromFile(const std::wstring& filePath, std::vecto
     return ParseJSON(jsonContent, outConfigs, outError);
 }
 
-bool ConfigurationManager::ParseJSON(const std::string& jsonContent, std::vector<MonitorConfig>& outConfigs, std::wstring& outError)
+bool ConfigurationManager::ParseJSON(const std::string& jsonContent, std::vector<MonitorConfig>& outConfigs,
+                                     std::wstring& outError)
 {
     outConfigs.clear();
 
@@ -87,14 +93,16 @@ bool ConfigurationManager::ParseJSON(const std::string& jsonContent, std::vector
 
             if (!monitorJson.contains("width") || !monitorJson["width"].is_number_integer())
             {
-                outError = L"Error: Monitor \"" + StringToWString(config.id) + L"\" is missing required field \"width\"";
+                outError =
+                    L"Error: Monitor \"" + StringToWString(config.id) + L"\" is missing required field \"width\"";
                 return false;
             }
             config.width = static_cast<DWORD>(monitorJson["width"].get<int>());
 
             if (!monitorJson.contains("height") || !monitorJson["height"].is_number_integer())
             {
-                outError = L"Error: Monitor \"" + StringToWString(config.id) + L"\" is missing required field \"height\"";
+                outError =
+                    L"Error: Monitor \"" + StringToWString(config.id) + L"\" is missing required field \"height\"";
                 return false;
             }
             config.height = static_cast<DWORD>(monitorJson["height"].get<int>());
@@ -162,29 +170,30 @@ bool ConfigurationManager::ParseJSON(const std::string& jsonContent, std::vector
 bool ConfigurationManager::ValidateMonitor(const MonitorConfig& config, size_t index, std::wstring& outError)
 {
     (void)index; // Parameter reserved for future use
-    
+
     // Validate width
     if (config.width < 640 || config.width > 7680)
     {
-     outError = L"Error: Monitor \"" + std::wstring(config.id.begin(), config.id.end()) +
-       L"\" has invalid width " + std::to_wstring(config.width) + L" (must be 640-7680)";
+        outError = L"Error: Monitor \"" + std::wstring(config.id.begin(), config.id.end()) + L"\" has invalid width " +
+                   std::to_wstring(config.width) + L" (must be 640-7680)";
         return false;
     }
 
     // Validate height
     if (config.height < 480 || config.height > 4320)
     {
-        outError = L"Error: Monitor \"" + std::wstring(config.id.begin(), config.id.end()) +
-    L"\" has invalid height " + std::to_wstring(config.height) + L" (must be 480-4320)";
+        outError = L"Error: Monitor \"" + std::wstring(config.id.begin(), config.id.end()) + L"\" has invalid height " +
+                   std::to_wstring(config.height) + L" (must be 480-4320)";
         return false;
     }
 
     // Validate refresh rate
-    static const std::set<DWORD> validRates = { 60, 75, 90, 120, 144, 240 };
+    static const std::set<DWORD> validRates = {60, 75, 90, 120, 144, 240};
     if (validRates.find(config.refreshRate) == validRates.end())
     {
         outError = L"Error: Monitor \"" + std::wstring(config.id.begin(), config.id.end()) +
-            L"\" has invalid refresh rate " + std::to_wstring(config.refreshRate) + L" (must be 60, 75, 90, 120, 144, or 240)";
+                   L"\" has invalid refresh rate " + std::to_wstring(config.refreshRate) +
+                   L" (must be 60, 75, 90, 120, 144, or 240)";
         return false;
     }
 
@@ -225,13 +234,15 @@ bool ConfigurationManager::CheckForOverlaps(const std::vector<MonitorConfig>& co
             const auto& m2 = configs[j];
 
             // Simple AABB overlap check
-            bool xOverlap = (m1.positionX < m2.positionX + (LONG)m2.width) && (m1.positionX + (LONG)m1.width > m2.positionX);
-            bool yOverlap = (m1.positionY < m2.positionY + (LONG)m2.height) && (m1.positionY + (LONG)m1.height > m2.positionY);
+            bool xOverlap = (m1.positionX < m2.positionX + (LONG)m2.width) &&
+                            (m1.positionX + (LONG)m1.width > m2.positionX);
+            bool yOverlap = (m1.positionY < m2.positionY + (LONG)m2.height) &&
+                            (m1.positionY + (LONG)m1.height > m2.positionY);
 
             if (xOverlap && yOverlap)
             {
-                outError = L"Error: Monitors \"" + std::wstring(m1.id.begin(), m1.id.end()) +
-                    L"\" and \"" + std::wstring(m2.id.begin(), m2.id.end()) + L"\" overlap";
+                outError = L"Error: Monitors \"" + std::wstring(m1.id.begin(), m1.id.end()) + L"\" and \"" +
+                           std::wstring(m2.id.begin(), m2.id.end()) + L"\" overlap";
                 return false;
             }
         }

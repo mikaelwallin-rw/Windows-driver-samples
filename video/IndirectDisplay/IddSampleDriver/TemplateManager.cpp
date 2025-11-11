@@ -1,7 +1,9 @@
 #include "TemplateManager.h"
-#include "ConfigurationManager.h"
-#include <fstream>
+
 #include <algorithm>
+#include <fstream>
+
+#include "ConfigurationManager.h"
 
 using namespace Microsoft::IndirectDisp;
 
@@ -51,9 +53,7 @@ std::vector<TemplateInfo> TemplateManager::ListTemplates() const
 
     // Sort templates by name for consistent ordering
     std::sort(templates.begin(), templates.end(),
-        [](const TemplateInfo& a, const TemplateInfo& b) {
-            return a.name < b.name;
-        });
+              [](const TemplateInfo& a, const TemplateInfo& b) { return a.name < b.name; });
 
     return templates;
 }
@@ -75,7 +75,8 @@ std::wstring TemplateManager::GetTemplatePath(const std::wstring& templateName) 
     return L"";
 }
 
-bool TemplateManager::LoadTemplate(const std::wstring& templateName, std::vector<MonitorConfig>& outConfigs, std::wstring& outError) const
+bool TemplateManager::LoadTemplate(const std::wstring& templateName, std::vector<MonitorConfig>& outConfigs,
+                                   std::wstring& outError) const
 {
     std::wstring templatePath = GetTemplatePath(templateName);
     if (templatePath.empty())
@@ -108,14 +109,12 @@ std::wstring TemplateManager::AutoDetectTemplatesDirectory()
     std::wstring exeDir = (pos != std::wstring::npos) ? fullPath.substr(0, pos) : L".";
 
     // Try multiple possible locations
-    std::vector<std::wstring> possiblePaths = {
-        exeDir + L"\\templates",
-        exeDir + L"\\..\\templates",
-        exeDir + L"\\..\\..\\templates",
-        exeDir + L"\\..\\..\\..\\templates",
-        exeDir + L"\\..\\..\\..\\video\\IndirectDisplay\\templates",
-        L".\\templates"
-    };
+    std::vector<std::wstring> possiblePaths = {exeDir + L"\\templates",
+                                               exeDir + L"\\..\\templates",
+                                               exeDir + L"\\..\\..\\templates",
+                                               exeDir + L"\\..\\..\\..\\templates",
+                                               exeDir + L"\\..\\..\\..\\video\\IndirectDisplay\\templates",
+                                               L".\\templates"};
 
     for (const auto& path : possiblePaths)
     {
