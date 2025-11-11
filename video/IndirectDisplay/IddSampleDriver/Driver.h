@@ -3,8 +3,8 @@
 #define NOMINMAX
 #include <windows.h>
 
-#include <iddcx.h>
 #include <wdf.h>
+#include <iddcx.h>
 
 #include <memory>
 #include <vector>
