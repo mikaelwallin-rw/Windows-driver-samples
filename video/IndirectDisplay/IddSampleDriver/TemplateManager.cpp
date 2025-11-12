@@ -109,10 +109,8 @@ std::wstring TemplateManager::AutoDetectTemplatesDirectory()
     std::wstring exeDir = (pos != std::wstring::npos) ? fullPath.substr(0, pos) : L".";
 
     // Try multiple possible locations (relative to executable)
-    std::vector<std::wstring> possiblePaths = {exeDir + L"\\templates",
-                                               exeDir + L"\\..\\templates",
-                                               exeDir + L"\\..\\..\\templates",
-                                               exeDir + L"\\..\\..\\..\\templates",
+    std::vector<std::wstring> possiblePaths = {exeDir + L"\\templates", exeDir + L"\\..\\templates",
+                                               exeDir + L"\\..\\..\\templates", exeDir + L"\\..\\..\\..\\templates",
                                                L".\\templates"};
 
     for (const auto& path : possiblePaths)

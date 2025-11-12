@@ -255,7 +255,8 @@ std::vector<MonitorConfig> ConfigurationManager::GetDefaultConfiguration()
 {
     std::vector<MonitorConfig> configs;
 
-    // Return the current 4-monitor default configuration
+    // TEMPORARY DEBUG: Return 10 monitors to verify if this function is being called
+    // If you see 10 monitors, the registry config is NOT being loaded!
     MonitorConfig mon1;
     mon1.id = "monitor1-1440p-144hz";
     mon1.width = 2560;
@@ -292,6 +293,19 @@ std::vector<MonitorConfig> ConfigurationManager::GetDefaultConfiguration()
     mon4.positionX = 8320;
     mon4.positionY = 0;
     configs.push_back(mon4);
+
+    // Add 6 more monitors for debug testing (total 10)
+    for (int i = 5; i <= 10; i++)
+    {
+        MonitorConfig monDebug;
+        monDebug.id = "debug-monitor-" + std::to_string(i);
+        monDebug.width = 1024;
+        monDebug.height = 768;
+        monDebug.refreshRate = 60;
+        monDebug.positionX = 10240 + (i - 5) * 1024;
+        monDebug.positionY = 0;
+        configs.push_back(monDebug);
+    }
 
     return configs;
 }

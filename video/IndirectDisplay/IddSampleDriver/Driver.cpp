@@ -651,30 +651,47 @@ void IndirectMonitorContext::UnassignSwapChain()
 
 #pragma region DDI Callbacks
 
-// Helper function to read config path from registry
-static std::wstring ReadConfigPathFromRegistry()
+// Helper function to read config JSON directly from registry
+static std::string ReadConfigJsonFromRegistry()
 {
     HKEY hKey;
-    std::wstring configPath;
+    std::string configJson;
 
-    LONG result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\IddSampleDriver", 0, KEY_READ, &hKey);
+    LONG result = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\IddSampleDriver", 0, KEY_READ | KEY_WOW64_64KEY, &hKey);
 
     if (result == ERROR_SUCCESS)
     {
-        wchar_t buffer[MAX_PATH];
-        DWORD bufferSize = sizeof(buffer);
+        DWORD bufferSize = 0;
+        DWORD type = 0;
 
-        result = RegQueryValueExW(hKey, L"ConfigPath", nullptr, nullptr, reinterpret_cast<BYTE*>(buffer), &bufferSize);
+        // First, get the size of the data
+        result = RegQueryValueExW(hKey, L"ConfigJSON", nullptr, &type, nullptr, &bufferSize);
 
-        if (result == ERROR_SUCCESS)
+        if (result == ERROR_SUCCESS && bufferSize > 0 && type == REG_SZ)
         {
-            configPath = buffer;
+            // Allocate buffer for wide string and read the data
+            std::vector<wchar_t> wideBuffer(bufferSize / sizeof(wchar_t));
+            result = RegQueryValueExW(hKey, L"ConfigJSON", nullptr, nullptr, reinterpret_cast<BYTE*>(wideBuffer.data()),
+                                      &bufferSize);
+
+            if (result == ERROR_SUCCESS)
+            {
+                // Convert wide string to UTF-8
+                int sizeNeeded = WideCharToMultiByte(CP_UTF8, 0, wideBuffer.data(), -1, nullptr, 0, nullptr, nullptr);
+                if (sizeNeeded > 0)
+                {
+                    std::vector<char> utf8Buffer(sizeNeeded);
+                    WideCharToMultiByte(CP_UTF8, 0, wideBuffer.data(), -1, utf8Buffer.data(), sizeNeeded, nullptr,
+                                        nullptr);
+                    configJson = std::string(utf8Buffer.data());
+                }
+            }
         }
 
         RegCloseKey(hKey);
     }
 
-    return configPath;
+    return configJson;
 }
 
 _Use_decl_annotations_ NTSTATUS IddSampleAdapterInitFinished(IDDCX_ADAPTER AdapterObject,
@@ -687,16 +704,16 @@ _Use_decl_annotations_ NTSTATUS IddSampleAdapterInitFinished(IDDCX_ADAPTER Adapt
     if (NT_SUCCESS(pInArgs->AdapterInitStatus))
     {
         // Try to load configuration from registry
-        std::wstring configPath = ReadConfigPathFromRegistry();
+        std::string configJson = ReadConfigJsonFromRegistry();
         std::vector<MonitorConfig> configs;
         std::wstring errorMsg;
 
         bool configLoaded = false;
 
-        if (!configPath.empty())
+        if (!configJson.empty())
         {
-            // Try to load from file
-            configLoaded = ConfigurationManager::LoadFromFile(configPath, configs, errorMsg);
+            // Try to parse JSON directly from registry
+            configLoaded = ConfigurationManager::ParseJSON(configJson, configs, errorMsg);
 
             // If loading failed, log error but continue with default
             if (!configLoaded)
