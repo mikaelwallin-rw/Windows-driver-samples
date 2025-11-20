@@ -287,7 +287,18 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 
     // These match the Pnp id's in the inf file so OS will load the driver when
     // the device is created
-    PCWSTR instanceId = L"IddSampleDriver";
+    std::wstring instanceIdStr = L"IddSampleDriver";
+    if (!templateName.empty())
+    {
+        instanceIdStr += L"_";
+        instanceIdStr += templateName;
+    }
+    else if (!configPath.empty())
+    {
+        instanceIdStr += L"_Custom";
+    }
+
+    PCWSTR instanceId = instanceIdStr.c_str();
     PCWSTR hardwareIds = L"IddSampleDriver\0\0";
     PCWSTR compatibleIds = L"IddSampleDriver\0\0";
 
@@ -301,7 +312,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
                                  SWDeviceCapabilitiesDriverRequired;
 
     // Create the device (with retry logic for cleanup delays)
-    std::wcout << L"Creating virtual display device...\n";
+    std::wcout << L"Creating virtual display device with Instance ID: " << instanceId << L"\n";
     HRESULT hr = E_FAIL;
     int retryCount = 0;
     const int maxRetries = 5;

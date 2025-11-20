@@ -1,8 +1,8 @@
 [
   {
-    "id": "virtual-1080p-portrait-1",
-    "width": 1920,
-    "height": 1080,
+    "id": "virtual-1440p-1",
+    "width": 2560,
+    "height": 1440,
     "refreshRate": 60,
     "position": { "x": 0, "y": 0 },
     "primary": false

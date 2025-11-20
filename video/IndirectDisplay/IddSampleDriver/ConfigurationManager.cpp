@@ -277,9 +277,9 @@ std::vector<MonitorConfig> ConfigurationManager::GetDefaultConfiguration()
     configs.push_back(mon2);
 
     MonitorConfig mon3;
-    mon3.id = "monitor3-1080p-60hz";
-    mon3.width = 1920;
-    mon3.height = 1080;
+    mon3.id = "monitor3-1440p-60hz";
+    mon3.width = 2560;
+    mon3.height = 1440;
     mon3.refreshRate = 60;
     mon3.positionX = 6400;
     mon3.positionY = 0;

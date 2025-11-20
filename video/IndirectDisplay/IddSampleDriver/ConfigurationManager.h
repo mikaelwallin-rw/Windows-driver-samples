@@ -23,7 +23,7 @@ struct MonitorConfig
     LONG positionY;
     bool primary;
 
-    MonitorConfig() : width(1920), height(1080), refreshRate(60), positionX(0), positionY(0), primary(false)
+    MonitorConfig() : width(2560), height(1440), refreshRate(60), positionX(0), positionY(0), primary(false)
     {
     }
 };

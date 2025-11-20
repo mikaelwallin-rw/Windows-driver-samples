@@ -23,6 +23,17 @@ using namespace std;
 using namespace Microsoft::IndirectDisp;
 using namespace Microsoft::WRL;
 
+// Helper for debug output
+static void DebugPrint(const char* format, ...)
+{
+    char buffer[1024];
+    va_list args;
+    va_start(args, format);
+    vsnprintf_s(buffer, sizeof(buffer), _TRUNCATE, format, args);
+    va_end(args);
+    OutputDebugStringA(buffer);
+}
+
 #pragma region SampleMonitors
 
 static constexpr DWORD IDD_SAMPLE_MONITOR_COUNT = 4; // Support up to 4 virtual monitors
@@ -195,6 +206,14 @@ extern "C" BOOL WINAPI DllMain(_In_ HINSTANCE hInstance, _In_ UINT dwReason, _In
 
 _Use_decl_annotations_ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
 {
+    UNREFERENCED_PARAMETER(pDriverObject);
+    UNREFERENCED_PARAMETER(pRegistryPath);
+
+    DebugPrint("IddSampleDriver: DriverEntry called - Driver Loaded\n");
+
+    // DEBUG: Fail intentionally to verify new binary is running
+    // return STATUS_UNSUCCESSFUL;
+
     WDF_DRIVER_CONFIG Config;
     NTSTATUS Status;
 
@@ -206,6 +225,7 @@ _Use_decl_annotations_ extern "C" NTSTATUS DriverEntry(PDRIVER_OBJECT pDriverObj
     Status = WdfDriverCreate(pDriverObject, pRegistryPath, &Attributes, &Config, WDF_NO_HANDLE);
     if (!NT_SUCCESS(Status))
     {
+        DebugPrint("IddSampleDriver: WdfDriverCreate failed with status 0x%x\n", Status);
         return Status;
     }
 
@@ -545,8 +565,6 @@ void IndirectDeviceContext::InitAdapter()
 
 void IndirectDeviceContext::FinishInit(UINT ConnectorIndex, const MonitorConfig& config)
 {
-    (void)config; // TODO: Use config to generate dynamic EDID or configure monitor properties
-
     // ==============================
     // TODO: In a real driver, the EDID should be retrieved dynamically from a connected physical monitor. The EDIDs
     // provided here are purely for demonstration.
@@ -567,15 +585,28 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex, const MonitorConfig&
     MonitorInfo.MonitorDescription.Size = sizeof(MonitorInfo.MonitorDescription);
     MonitorInfo.MonitorDescription.Type = IDDCX_MONITOR_DESCRIPTION_TYPE_EDID;
 
-    // Use existing EDID blocks if available, otherwise use edid-less mode
-    if (ConnectorIndex < ARRAYSIZE(s_SampleMonitors))
+    // Select EDID based on configuration
+    // Index 0: 1440p (Dell S2719DGF)
+    // Index 1: 4K (Lenovo Y27fA)
+    // Index 2: 1080p (Generic)
+    int monitorIndex = 2; // Default to 1080p
+
+    if (config.width == 2560 && config.height == 1440)
     {
-        MonitorInfo.MonitorDescription.DataSize = IndirectSampleMonitor::szEdidBlock;
-        MonitorInfo.MonitorDescription.pData = const_cast<BYTE*>(s_SampleMonitors[ConnectorIndex].pEdidBlock);
+        monitorIndex = 0;
+    }
+    else if (config.width == 3840 && config.height == 2160)
+    {
+        monitorIndex = 1;
+    }
+
+    if (monitorIndex < IDD_SAMPLE_MONITOR_COUNT)
+    {
+        MonitorInfo.MonitorDescription.DataSize = sizeof(s_SampleMonitors[monitorIndex].pEdidBlock);
+        MonitorInfo.MonitorDescription.pData = const_cast<BYTE*>(s_SampleMonitors[monitorIndex].pEdidBlock);
     }
     else
     {
-        // For dynamically configured monitors beyond the hardcoded array, use edid-less mode
         MonitorInfo.MonitorDescription.DataSize = 0;
         MonitorInfo.MonitorDescription.pData = nullptr;
     }
@@ -604,9 +635,8 @@ void IndirectDeviceContext::FinishInit(UINT ConnectorIndex, const MonitorConfig&
         auto* pMonitorContextWrapper = WdfObjectGet_IndirectMonitorContextWrapper(MonitorCreateOut.MonitorObject);
         pMonitorContextWrapper->pContext = new IndirectMonitorContext(MonitorCreateOut.MonitorObject);
 
-        // TODO: Store the configuration in the monitor context for later use
-        // The MonitorConfig can be stored in IndirectMonitorContext if needed for
-        // mode generation or other runtime configuration
+        // Store the configuration in the monitor context
+        pMonitorContextWrapper->pContext->SetConfig(config);
 
         // Tell the OS that the monitor has been plugged in
         IDARG_OUT_MONITORARRIVAL ArrivalOut;
@@ -684,11 +714,24 @@ static std::string ReadConfigJsonFromRegistry()
                     WideCharToMultiByte(CP_UTF8, 0, wideBuffer.data(), -1, utf8Buffer.data(), sizeNeeded, nullptr,
                                         nullptr);
                     configJson = std::string(utf8Buffer.data());
+                    DebugPrint("IddSampleDriver: Successfully read config from registry (%llu bytes)\n", configJson.size());
                 }
             }
+            else
+            {
+                DebugPrint("IddSampleDriver: Failed to read ConfigJSON value (error %d)\n", result);
+            }
+        }
+        else
+        {
+            DebugPrint("IddSampleDriver: ConfigJSON value not found or invalid type/size (error %d)\n", result);
         }
 
         RegCloseKey(hKey);
+    }
+    else
+    {
+        DebugPrint("IddSampleDriver: Failed to open registry key (error %d)\n", result);
     }
 
     return configJson;
@@ -718,14 +761,24 @@ _Use_decl_annotations_ NTSTATUS IddSampleAdapterInitFinished(IDDCX_ADAPTER Adapt
             // If loading failed, log error but continue with default
             if (!configLoaded)
             {
+                DebugPrint("IddSampleDriver: Failed to parse JSON config: %ws\n", errorMsg.c_str());
                 // Could use WPP tracing here to log the error
                 // For now, just fall through to default config
             }
+            else
+            {
+                DebugPrint("IddSampleDriver: Successfully parsed %llu monitor configs\n", configs.size());
+            }
+        }
+        else
+        {
+            DebugPrint("IddSampleDriver: Config JSON is empty\n");
         }
 
         // If no config or loading failed, use default configuration
         if (!configLoaded || configs.empty())
         {
+            DebugPrint("IddSampleDriver: Using default configuration\n");
             configs = ConfigurationManager::GetDefaultConfiguration();
         }
 
@@ -821,20 +874,31 @@ _Use_decl_annotations_ NTSTATUS IddSampleMonitorGetDefaultModes(IDDCX_MONITOR Mo
     // than an EDID, those modes would also be reported here.
     // ==============================
 
+    auto* pMonitorContextWrapper = WdfObjectGet_IndirectMonitorContextWrapper(MonitorObject);
+    const auto& config = pMonitorContextWrapper->pContext->GetConfig();
+
+    DebugPrint("IddSampleDriver: GetDefaultModes for monitor %s (Requested: %dx%d @ %dHz)\n", config.id.c_str(),
+               config.width, config.height, config.refreshRate);
+
     if (pInArgs->DefaultMonitorModeBufferInputCount == 0)
     {
-        pOutArgs->DefaultMonitorModeBufferOutputCount = ARRAYSIZE(s_SampleDefaultModes);
+        pOutArgs->DefaultMonitorModeBufferOutputCount = 1;
     }
     else
     {
-        for (DWORD ModeIndex = 0; ModeIndex < ARRAYSIZE(s_SampleDefaultModes); ModeIndex++)
+        // DEBUG: Force 1440p if 1080p is requested to verify driver update
+        DWORD width = config.width;
+        DWORD height = config.height;
+        if (width == 1920 && height == 1080)
         {
-            pInArgs->pDefaultMonitorModes[ModeIndex] =
-                CreateIddCxMonitorMode(s_SampleDefaultModes[ModeIndex].Width, s_SampleDefaultModes[ModeIndex].Height,
-                                       s_SampleDefaultModes[ModeIndex].VSync, IDDCX_MONITOR_MODE_ORIGIN_DRIVER);
+            DebugPrint("IddSampleDriver: DEBUG OVERRIDE - Forcing 1440p for 1080p request\n");
+            width = 2560;
+            height = 1440;
         }
 
-        pOutArgs->DefaultMonitorModeBufferOutputCount = ARRAYSIZE(s_SampleDefaultModes);
+        pInArgs->pDefaultMonitorModes[0] = CreateIddCxMonitorMode(width, height, config.refreshRate,
+                                                                  IDDCX_MONITOR_MODE_ORIGIN_DRIVER);
+        pOutArgs->DefaultMonitorModeBufferOutputCount = 1;
         pOutArgs->PreferredMonitorModeIdx = 0;
     }
 
@@ -852,6 +916,11 @@ _Use_decl_annotations_ NTSTATUS IddSampleMonitorQueryModes(IDDCX_MONITOR Monitor
     // Create a set of modes supported for frame processing and scan-out. These are typically not based on the
     // monitor's descriptor and instead are based on the static processing capability of the device. The OS will
     // report the available set of modes for a given output as the intersection of monitor modes with target modes.
+
+    auto* pMonitorContextWrapper = WdfObjectGet_IndirectMonitorContextWrapper(MonitorObject);
+    const auto& config = pMonitorContextWrapper->pContext->GetConfig();
+
+    TargetModes.push_back(CreateIddCxTargetMode(config.width, config.height, config.refreshRate));
 
     TargetModes.push_back(CreateIddCxTargetMode(3840, 2160, 60));
     TargetModes.push_back(CreateIddCxTargetMode(2560, 1440, 144));

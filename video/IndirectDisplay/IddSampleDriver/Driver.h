@@ -117,9 +117,13 @@ class IndirectMonitorContext
     void AssignSwapChain(IDDCX_SWAPCHAIN SwapChain, LUID RenderAdapter, HANDLE NewFrameEvent);
     void UnassignSwapChain();
 
+    void SetConfig(const MonitorConfig& config) { m_Config = config; }
+    const MonitorConfig& GetConfig() const { return m_Config; }
+
   private:
     IDDCX_MONITOR m_Monitor;
     std::unique_ptr<SwapChainProcessor> m_ProcessingThread;
+    MonitorConfig m_Config;
 };
 } // namespace IndirectDisp
 } // namespace Microsoft
